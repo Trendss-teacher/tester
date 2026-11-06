@@ -44,6 +44,8 @@
             return d;
         };
         // Pemilik laporan = ID sama ATAU nama sama (rekod lama guna ID jenis "t_5")
+        const IMG_MIN = 2, IMG_MAX = 5, NO_IMG_DUTY = 5;
+        const normImg = (x) => typeof x === 'string' ? { src: x, caption: '' } : { src: x.url || x.src || '', caption: x.caption || '' };
         const isOwner = (task, user) => !!task && !!user && ((task.teacherId && task.teacherId === user.id) || String(task.teacherName||'').trim().toUpperCase() === String(user.name||'').trim().toUpperCase());
         
 		const formatDateDisplay = (dateStr) => {
@@ -145,7 +147,7 @@
 
         const MultiImageUpload = ({ images, setImages, label }) => {
             const MAX_SIZE = 5 * 1024 * 1024; // 5MB
-            
+
             const compressImage = (file) => {
                 return new Promise((resolve) => {
                     const reader = new FileReader();
@@ -167,33 +169,41 @@
 
             const handleUpload = async (e) => {
                 const files = Array.from(e.target.files);
-                if (images.length + files.length > 3) { alert('Maksimum 3 gambar sahaja.'); return; }
+                if (images.length + files.length > IMG_MAX) { alert('Maksimum ' + IMG_MAX + ' gambar sahaja.'); e.target.value = ''; return; }
                 const newImages = [...images];
                 for(let file of files) {
                     if(!file.type.startsWith('image/')) continue;
                     if(file.size > MAX_SIZE && !window.confirm(`Saiz ${file.name} besar. Ia akan dikecilkan. Teruskan?`)) continue;
                     const b64 = await compressImage(file);
-                    newImages.push(b64);
+                    newImages.push({ src: b64, caption: '' });
                 }
                 setImages(newImages);
                 e.target.value = '';
             };
 
             const removeImage = (index) => { setImages(images.filter((_, i) => i !== index)); };
+            const setCaption = (index, text) => { setImages(images.map((im, i) => i === index ? { ...im, caption: text } : im)); };
+            const missing = Math.max(0, IMG_MIN - images.length);
 
             return (
                 <div className="mt-8 border-t border-white/10 pt-6">
-                    <label className="block text-sm font-semibold text-slate-300 mb-1">{label} (Maksimum 3)</label>
-                    <p className="text-xs text-slate-400 mb-4">Sila muat naik bukti bergambar berkaitan tugasan anda.</p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {images.map((src, i) => (
-                            <div key={i} className="relative h-32 rounded-xl border border-white/20 overflow-hidden group bg-black/50">
-                                <img src={src} className="w-full h-full object-cover" alt="Preview" />
-                                <button type="button" onClick={() => removeImage(i)} className="absolute inset-0 bg-red-500/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition backdrop-blur-sm text-xs font-bold gap-1"><i className="ph-bold ph-trash"></i> Padam</button>
+                    <label className="block text-sm font-semibold text-slate-300 mb-1">{label} (Minimum {IMG_MIN}, Maksimum {IMG_MAX})</label>
+                    <p className="text-xs text-slate-400 mb-1">Muat naik bukti bergambar dan tulis caption ringkas bagi setiap gambar.</p>
+                    <p className={`text-xs font-bold mb-4 ${missing > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>{images.length} / {IMG_MAX} gambar{missing > 0 ? ` — tambah sekurang-kurangnya ${missing} lagi` : ''}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {images.map((im, i) => (
+                            <div key={i} className="rounded-xl border border-white/20 overflow-hidden bg-black/30">
+                                <div className="relative h-40 bg-black/50">
+                                    <img src={im.src.startsWith('data:image') ? im.src : im.src.replace('https://drive.google.com/uc?export=view&id=', 'https://drive.google.com/thumbnail?id=') + '&sz=w600'} className="w-full h-full object-cover" alt="Preview" />
+                                    <button type="button" onClick={() => removeImage(i)} className="absolute top-2 right-2 bg-rose-500/90 hover:bg-rose-500 text-white rounded-lg px-2.5 py-1.5 text-xs font-bold flex items-center gap-1"><i className="ph-bold ph-trash"></i> Padam</button>
+                                </div>
+                                <div className="p-3">
+                                    <input type="text" maxLength="120" placeholder={`Caption gambar ${i + 1} (wajib)`} value={im.caption} onChange={e => setCaption(i, e.target.value)} className={`w-full glass-input rounded-lg p-2.5 text-sm outline-none ${!im.caption.trim() ? 'border-amber-400/60' : ''}`} />
+                                </div>
                             </div>
                         ))}
-                        {images.length < 3 && (
-                            <label className="cursor-pointer bg-black/20 border-2 border-dashed border-white/20 hover:border-indigo-400 rounded-xl flex flex-col items-center justify-center h-32 transition group">
+                        {images.length < IMG_MAX && (
+                            <label className="cursor-pointer bg-black/20 border-2 border-dashed border-white/20 hover:border-indigo-400 rounded-xl flex flex-col items-center justify-center min-h-[10rem] transition group">
                                 <i className="ph ph-plus text-2xl text-slate-500 group-hover:text-indigo-400 mb-1"></i>
                                 <span className="text-[10px] font-medium text-slate-400 group-hover:text-indigo-300 text-center px-2">Tambah<br/>Gambar</span>
                                 <input type="file" accept="image/*" multiple onChange={handleUpload} className="hidden" />
@@ -356,12 +366,12 @@
             const [week, setWeek] = React.useState(init?.week || "");
             const [dutyId, setDutyId] = React.useState(initial ? Number(initial.dutyId) : "");
             const [taskData, setTaskData] = React.useState(init ? init : {});
-            const [images, setImages] = React.useState(init?.images || []); 
+            const [images, setImages] = React.useState((init?.images || []).map(normImg)); 
 
             const handleDutyChange = (id) => { 
                 setDutyId(Number(id)); 
                 const ext = reports[date]?.tasks?.[id];
-                if(ext) { setTaskData(ext); setImages(ext.images || []); setWeek(ext.week || ""); }
+                if(ext) { setTaskData(ext); setImages((ext.images || []).map(normImg)); setWeek(ext.week || ""); }
                 else { setTaskData({}); setImages([]); }
             };
 
@@ -372,6 +382,11 @@
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 if(isLocked) return showToast('Telah diisi oleh guru lain.');
+                if (dutyId !== NO_IMG_DUTY) {
+                    if (images.length < IMG_MIN) return showToast('Sila muat naik sekurang-kurangnya ' + IMG_MIN + ' gambar.', 5000);
+                    const bad = images.findIndex(im => !im.caption.trim());
+                    if (bad > -1) return showToast('Sila isi caption bagi gambar ' + (bad + 1) + '.', 5000);
+                }
                 const okSaved = await saveReport(date, dutyId, { ...taskData, week }, images);
                 if (okSaved) { setDutyId(""); setTaskData({}); setImages([]); }
             };
@@ -509,31 +524,22 @@
 
         const DriveImageGallery = ({ urls, title }) => {
             if(!urls || urls.length === 0) return null;
+            const items = urls.map(normImg);
             return (
                 <div className="mb-5 bg-slate-50 p-4 rounded-lg border border-slate-200">
                     <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider block border-b-2 border-indigo-200 pb-1 mb-3">{title}</span>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {urls.map((url, i) => (
-                            <div key={i} className="border border-slate-200 p-1.5 rounded bg-white group shadow-sm">
-                                <img
-									src={
-										url.startsWith("data:image")
-											? url
-											: url.replace(
-												"https://drive.google.com/uc?export=view&id=",
-												"https://drive.google.com/thumbnail?id="
-											  ) + "&sz=w1000"
-									}
-									className="w-full h-32 object-cover rounded"
-									alt="Lampiran"
-									onError={e => {
-										e.target.parentElement.innerHTML =
-											'<div class="text-xs text-rose-500 flex h-full items-center justify-center font-medium bg-rose-50 rounded border border-rose-200">Gagal Paparan. Sila buka link.</div>';
-									}}
-								/>
-                                <a href={url} target="_blank" className="text-[10px] text-center text-indigo-600 font-bold hover:text-indigo-800 underline mt-2 block pb-1">Buka Fail Penuh</a>
-                            </div>
-                        ))}
+                        {items.map((it, i) => {
+                            const url = it.src;
+                            const thumb = url.startsWith("data:image") ? url : url.replace("https://drive.google.com/uc?export=view&id=", "https://drive.google.com/thumbnail?id=") + "&sz=w1000";
+                            return (
+                            <div key={i} className="border border-slate-200 p-1.5 rounded bg-white group shadow-sm print-break-inside-avoid">
+                                <img src={thumb} className="w-full h-32 object-cover rounded" alt={it.caption || "Lampiran"}
+                                    onError={e => { e.target.parentElement.innerHTML = '<div class="text-xs text-rose-500 flex h-full items-center justify-center font-medium bg-rose-50 rounded border border-rose-200">Gagal Paparan. Sila buka link.</div>'; }} />
+                                {it.caption && <div className="text-xs text-slate-700 font-medium text-center mt-2 px-1 leading-snug">{it.caption}</div>}
+                                <a href={url} target="_blank" className="no-print text-[10px] text-center text-indigo-600 font-bold hover:text-indigo-800 underline mt-2 block pb-1">Buka Fail Penuh</a>
+                            </div>);
+                        })}
                     </div>
                 </div>
             );
